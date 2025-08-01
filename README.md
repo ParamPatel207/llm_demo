@@ -1,25 +1,25 @@
-# LangChain Agent with Bedrock and MCP Servers Demo - MLflow Edition
+# Claude + Tavily Search Agent Demo
 
-This project demonstrates how to build a LangChain agent that uses AWS Bedrock for its language model and interacts with external tools hosted as MCP (Model Context Protocol) servers. The entire demonstration is contained within a Jupyter Notebook for easy, step-by-step execution, with comprehensive tracking using MLflow.
+This project demonstrates a powerful AI agent using **Claude 3.5 Sonnet** via AWS Bedrock with **Tavily search** capabilities for real-time web intelligence.
 
 ## Features
 
-- **Jupyter Notebook-driven**: The main logic is presented in a clear, interactive notebook.
-- **AWS Bedrock Integration**: Leverages powerful models like Claude from AWS Bedrock.
-- **Dockerized MCP Servers**: External tools (like a calculator and a weather service) run in isolated Docker containers.
-- **MLflow Tracking**: Comprehensive experiment tracking, metrics logging, and model management.
-- **Performance Analytics**: Real-time monitoring of agent execution times, response quality, and tool usage.
-- **Model Versioning**: Track different agent configurations and their performance over time.
-- **FastAPI Framework**: The MCP servers are built using FastAPI, a modern, fast web framework for Python.
+- **Claude 3.5 Reasoning**: Advanced AI via AWS Bedrock with superior reasoning capabilities
+- **Real-time Web Search**: Live internet search powered by Tavily API
+- **Intelligent Tool Selection**: Claude automatically decides when and how to search
+- **Interactive Jupyter Notebook**: Easy-to-follow demo with step-by-step execution
+- **Production-Ready**: Enterprise-grade AWS infrastructure with robust error handling
+- **Direct API Integration**: No middleware - direct Claude + Tavily integration
+- **Conversation Memory**: Maintains context for follow-up questions
 
 ## How to Run the Demo
 
 ### Prerequisites
 
-- [Docker](https://www.docker.com/get-started) and Docker Compose
 - Python 3.8+
-- An AWS account with access to Bedrock models.
-- MLflow for experiment tracking (included in requirements.txt)
+- AWS account with Bedrock access (Claude 3.5 Sonnet enabled)
+- AWS credentials configured in your environment  
+- Tavily API key from [tavily.com](https://tavily.com)
 
 ### 1. Set Up Your Environment
 
@@ -49,75 +49,69 @@ cp env.example .env
 Now, open the `.env` file and add your credentials:
 
 ```
-# AWS Configuration
+# AWS Bedrock Configuration (for Claude 3.5 Sonnet)
 AWS_ACCESS_KEY_ID=your_aws_access_key
 AWS_SECRET_ACCESS_KEY=your_aws_secret_key
 AWS_REGION=us-east-1
 
-# MLflow Configuration
-MLFLOW_TRACKING_URI=http://localhost:5000
-MLFLOW_EXPERIMENT_NAME=LangChain-Bedrock-MCP-Agent
+# Tavily Search API
+TAVILY_API_KEY=tvly-YOUR_TAVILY_API_KEY_HERE
 ```
 
-*Note: MLflow will automatically create a local SQLite database for tracking if no specific backend is configured.*
+*Note: Your AWS credentials should already be configured if you're using AWS services.*
 
-### 3. Start the MCP Servers
+### 3. Run the Demo
 
-With Docker running, start the calculator and weather MCP servers using Docker Compose:
-
-```bash
-docker-compose up --build
-```
-
-This command will build the Docker images for the two servers and run them in the background. You should see logs indicating that both servers are running. The calculator will be available at `http://localhost:8001` and the weather service at `http://localhost:8002`.
-
-### 4. Start MLflow Tracking Server (Optional)
-
-For a better tracking experience, start the MLflow UI server:
-
-```bash
-source venv/bin/activate
-mlflow ui --host 0.0.0.0 --port 5000
-```
-
-This will start the MLflow UI at http://localhost:5000 where you can view experiment results, metrics, and model artifacts.
-
-### 5. Run the Jupyter Notebook
-
-Now you can start the Jupyter Notebook to run the agent:
+Start the Jupyter Notebook to run the Claude + Tavily search agent:
 
 ```bash
 source venv/bin/activate
 jupyter notebook agent_demo.ipynb
 ```
 
-This will open the notebook in your web browser. You can then execute the cells one by one to see the agent in action with comprehensive MLflow tracking.
+This will open the notebook in your web browser. Execute the cells one by one to see Claude in action with real-time web search capabilities.
 
-### 6. Shut Down the Servers
+### 4. Try the Interactive Demo
 
-Once you are finished with the demo, you can stop the MCP servers with:
+The notebook includes:
+- **Setup verification**: Check that your AWS and Tavily credentials are working
+- **Live examples**: See Claude search for current events and factual information  
+- **Interactive chat**: Have natural conversations with web-powered responses
 
-```bash
-docker-compose down
-```
+### 5. Example Queries to Try
+
+- "What are the latest developments in AI in 2024?"
+- "What is the current price of Bitcoin?"
+- "Who won the latest Nobel Prize in Physics?"
+- "What are the current trends in renewable energy?"
 
 ## Project Structure
 
 ```
 agentMCPDemo/
-├── mcp_servers/
-│   ├── calculator_server/  # Dockerized calculator tool
-│   │   ├── main.py
-│   │   ├── Dockerfile
-│   │   └── requirements.txt
-│   └── weather_server/     # Dockerized weather tool
-│       ├── main.py
-│       ├── Dockerfile
-│       └── requirements.txt
-├── agent_demo.ipynb        # The main notebook for the demo
-├── docker-compose.yml      # Manages the MCP server containers
-├── requirements.txt        # Python dependencies for the notebook
-├── .env.example            # Example environment file
-├── README.md               # This file
-└── plan.md                 # The project plan
+├── agent_demo.ipynb        # Main demo: Claude + Tavily search agent
+├── mcp_servers/            # Legacy MCP servers (optional)
+│   ├── tavily_server/      # Tavily MCP server implementation
+│   ├── calculator_server/  # Calculator tool server
+│   └── weather_server/     # Weather tool server
+├── requirements.txt        # Python dependencies
+├── .env.example            # Environment configuration template
+├── docker-compose.yml      # Container management (optional)
+├── README.md               # This documentation
+└── plan.md                 # Project implementation plan
 ```
+
+## Key Components
+
+- **`agent_demo.ipynb`**: The main interactive demo featuring Claude 3.5 Sonnet with Tavily search
+- **AWS Bedrock Integration**: Direct API calls to Claude via boto3
+- **Tavily Search**: Real-time web search capabilities  
+- **Legacy MCP Servers**: Optional containerized tools (not required for main demo)
+
+## Why This Architecture?
+
+- **🧠 Claude 3.5 Reasoning**: Superior reasoning and tool selection capabilities
+- **☁️ AWS Infrastructure**: Enterprise-grade reliability and performance  
+- **🔍 Real-time Search**: Current, accurate information via Tavily
+- **💡 Intelligent Tool Use**: Claude decides when and how to search automatically
+- **🚀 Production-Ready**: Built for scale with proper error handling
