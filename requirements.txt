@@ -1,0 +1,10 @@
+langchain
+langchain-community
+langchain-aws
+boto3
+jupyter
+python-dotenv
+docker
+fastapi
+uvicorn
+psycopg2-binary

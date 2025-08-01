@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  calculator_server:
+    build: ./mcp_servers/calculator_server
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./mcp_servers/calculator_server:/app
+    environment:
+      - LOG_LEVEL=debug
+
+  weather_server:
+    build: ./mcp_servers/weather_server
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./mcp_servers/weather_server:/app
+    environment:
+      - LOG_LEVEL=debug
