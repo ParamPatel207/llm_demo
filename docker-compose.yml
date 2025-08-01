@@ -18,3 +18,13 @@ services:
       - ./mcp_servers/weather_server:/app
     environment:
       - LOG_LEVEL=debug
+
+  tavily_server:
+    build: ./mcp_servers/tavily_server
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./mcp_servers/tavily_server:/app
+    environment:
+      - LOG_LEVEL=debug
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
