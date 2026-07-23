@@ -326,7 +326,177 @@ Output: `oscillation_score`, `bottom_score`, `suggested_size`, `invalidation_lev
 
 ---
 
-## Proposed File Structure
+## 6. HFT Market-Making Lessons → Best-in-Class Async System
+
+This section translates real HFT MM architecture into what we can (and cannot) build on Robinhood MCP + Polymarket CLOB. The goal is **best-in-class design for our latency/venue regime**, not fake nanosecond HFT.
+
+### Honest latency regimes
+
+| Regime | Typical latency | Our venues |
+|--------|-----------------|------------|
+| Colocated HFT | ns–µs, binary MD, FPGA/kernel bypass | **Out of scope** |
+| Pro algo / low-latency retail API | ms–tens of ms | Polymarket CLOB WS + signed orders |
+| Agentic / MCP brokerage | hundreds of ms–seconds | Robinhood Trading MCP |
+| Research / offline ML | minutes–hours | Fair-value + order-policy training |
+
+**Design rule:** compete on **fair value quality, inventory control, adverse-selection avoidance, and async reliability** — not on matching-engine race.
+
+### Map of the five HFT components
+
+| HFT component | Role of AI/ML (realistically) | Our implementation |
+|---------------|-------------------------------|--------------------|
+| **Market data** | Little online ML; purity + sync matter | Separate ingest processes: equities MD (quotes/bars), Polymarket WS books + Gamma discovery, related instruments for FV |
+| **Fair value** | Offline ML sets params; rare online inference | Guarded IP module: equities micro-FV + Polymarket P(event) models; related-instrument baskets |
+| **Order placement** | Offline policy search; online rules | Two-sided quotes on Poly; permissioned one-shot buys on RH; queue/rate/cancel logic |
+| **Exchange connectivity** | None | Venue adapters: `RobinhoodMCPGateway`, `PolymarketClobGateway` (V2 SDK) |
+| **Offline training** | **Primary ML spend** | Feature store → model discovery → param optimization → promote to live config |
+
+### Process topology (async, HFT-inspired)
+
+```
+[ MD Ingest ] ──ticks/books──► [ Fair Value ] ──theo/edge──► [ Order Policy ]
+     │                              │                              │
+     │                              ▼                              ▼
+     │                        [ Risk / Inventory ] ◄────── [ Gateway(s) ]
+     │                              │                              │
+     └──────── audit/features ──────┴────► [ Offline Trainer ]     │
+                                                                   ▼
+                                                         [ Fill / PnL bus ]
+                                                                   │
+                                                         [ Approval UI ] (equities default)
+```
+
+Hard separation (from HFT practice):
+
+1. **MD ingest never shares a thread with decisioning** — asyncio tasks or separate processes; drop/backpressure instead of blocking the trading loop.
+2. **Gateway is a thin protocol adapter** — no strategy logic inside signing/send.
+3. **Fair value is pure function of state + params** — params only change via offline promote, not ad-hoc in the hot path.
+4. **Order policy owns quoting/cancels/sizing** — consumes theo, inventory, fees, rate limits.
+5. **Offline training is the real edge** — walk-forward backtests, adverse-selection labels, quote-quality metrics.
+
+### Where AI/ML actually belongs
+
+| Layer | Use ML? | How |
+|-------|---------|-----|
+| Tick→book normalize | No | Deterministic parsers, checksums, resync |
+| Fair value | **Yes (mostly offline)** | Calibrate mean-reversion / relative-value / P(event); optional light online inference later |
+| Order placement | **Yes (offline policy)** | Learn spread offset, size, cancel thresholds; live = parameterized rules |
+| Research briefs (equities) | Yes (LLM) | Human-readable thesis; **not** in the Poly MM hot path |
+| Connectivity | No | SDK + retries + idempotent `ref_id` / order ids |
+
+Do **not** put a large LLM in the quote loop. Use LLMs for research, market selection, and post-trade explanation — same lesson as HFTs: predictive power only enters the loop when it beats latency cost.
+
+### Async trade conductor (permission modes)
+
+| Mode | Equities (Robinhood) | Polymarket |
+|------|----------------------|------------|
+| `MANUAL` | Signal → research → approve → review → place | Signal/quote plan → approve → place/cancel |
+| `SEMI_AUTO` | Auto-cancel / alerts; buys still approved | Auto two-sided quotes within inventory caps; widen/pull on risk |
+| `ASYNC_ARMED` | Pre-approved playbook (size, symbols, max loss/day); bot executes when edge≥threshold | Continuous MM / sniper within playbook; kill switch mandatory |
+
+“Asynchronously conduct trade” = event-driven workers (MD, FV, policy, gateway, fills) + a **playbook** you arm, not a chatty agent blocking on every tick.
+
+---
+
+## 7. Polymarket Implications (first-class venue)
+
+Polymarket is closer to classic MM than Robinhood equities: **true CLOB**, two-sided books, WS deltas, maker/taker dynamics, explicit resolution risk.
+
+### Venue stack (2026 V2)
+
+| API | URL | Role |
+|-----|-----|------|
+| Gamma | `https://gamma-api.polymarket.com` | Market discovery, metadata, volume, expiry, tags |
+| CLOB V2 | `https://clob.polymarket.com` | Books, place/cancel (use `py-clob-client-v2`) |
+| Data | `https://data-api.polymarket.com` | Positions, history, leaderboard |
+| Market WS | `wss://ws-subscriptions-clob.polymarket.com/ws/market` | Book snapshots/deltas, last trade |
+| User WS | `.../ws/user` | Own fills/cancels (auth) |
+| RTDS (optional) | `wss://ws-live-data.polymarket.com` | Related crypto prices for FV baskets |
+
+### Fair value on prediction markets (core IP)
+
+For a binary YES/NO token, theo ≈ **model probability of resolution**, adjusted for fees, time-to-expiry, and inventory.
+
+```
+theo_yes = P_model(event)
+edge = theo_yes - mid_yes   # after fee/half-spread costs
+quote_bid = theo_yes - skew(inventory) - reserve
+quote_ask = theo_yes + skew(inventory) + reserve
+```
+
+**Related-instrument basket** (HFT lesson): FV is rarely one book.
+
+| Market type | Related inputs |
+|-------------|----------------|
+| Crypto price thresholds | Binance/RTDS spot, vol surface proxy, time decay |
+| Election / politics | Poll aggregates, prediction-market cross-venue (Kalshi if available), news shocks |
+| Sports | Live score WS, win-prob models |
+| Macro / Fed | Futures rates, calendars, speech sentiment (offline-heavy) |
+| Corp / AI event markets | Equity tape + news (ties to Robinhood research stack) |
+
+Offline ML trains `P_model` and skew/reserve schedules; online loop applies frozen params to live books.
+
+### Order placement on Polymarket (MM + selective take)
+
+- Maintain **balanced two-sided** post-only quotes when edge is thin but inventory OK
+- **Take** (cross) only when `|edge|` exceeds take threshold after fees
+- Cancel/widen on: stale book, WS gap > N seconds, inventory breach, resolution proximity, news shock
+- Respect rate limits (~order/min caps); batch cancel+replace carefully
+- Size by depth, remaining open interest, and max loss at resolution (binary payoff is brutal)
+
+### Adverse selection & resolution risk (Poly-specific)
+
+- Binary payoff → inventory at expiry is **full notional risk**, not soft delta
+- Prefer markets with clear resolution rules + liquidity rewards
+- Pull quotes into known information windows (speech, print, tip-off)
+- Label historical fills as toxic vs benign for offline cancel-policy training
+
+### Cross-venue system (equities + Poly)
+
+```
+Shared: feature store, risk ledger, approval/playbook UI, offline trainer, audit log
+Equities path: oscillation/FV → research/fundamentals → Robinhood MCP gateway
+Poly path:     book MD → P(event) FV → quote policy → CLOB V2 gateway
+```
+
+Shared risk: **USD (or USDC) capital allocation** across Agentic RH cash and Polymarket collateral; one kill switch freezes both gateways.
+
+### Best-in-class model roadmap (offline → promote)
+
+1. **Data**: tick/book/trade store for Poly; OHLCV + fundamentals for equities; resolution outcomes labels
+2. **Features**: microprice, imbalance, related-basket residuals, time-to-expiry, inventory, fee-adjusted mid
+3. **Models**: calibrated classifiers/regressors for `P_model`; mean-reversion params for equities; **not** end-to-end LLM traders
+4. **Policy search**: simulate quote offsets, sizes, cancel rules vs historical books (fill models + toxicity)
+5. **Promote**: versioned param sets → live config; shadow mode before capital
+6. **Monitor**: realized edge, toxicity rate, inventory path, missed edge, gateway errors
+
+---
+
+## Implementation Checklist (additions)
+
+### Phase 8: Async runtime core
+
+- [ ] Event bus + separate MD / FV / policy / gateway workers
+- [ ] Playbook + kill switch + capital allocator
+- [ ] Feature logging for offline training
+
+### Phase 9: Polymarket venue
+
+- [ ] Gamma discovery client + condition_id ↔ token_id map
+- [ ] Local book from REST snapshot + WS deltas (resync on gap)
+- [ ] `py-clob-client-v2` gateway (place/cancel, user WS fills)
+- [ ] Binary FV module + inventory skew
+- [ ] Dry-run paper book before live keys
+
+### Phase 10: Offline training pipeline
+
+- [ ] Historical store + labels (fills, resolutions, adverse selection)
+- [ ] Walk-forward training jobs for FV + order policy params
+- [ ] Param registry + shadow → live promotion
+
+---
+
+## Proposed File Structure (updated)
 
 ```
 ai-hedgefund/
@@ -334,42 +504,58 @@ ai-hedgefund/
 ├── README.md
 ├── requirements.txt
 ├── env.example
-├── docker-compose.yml          # optional local services
+├── docker-compose.yml
 ├── src/
-│   ├── api/                    # FastAPI routes
-│   ├── strategy/               # oscillation, bottoms, risk
-│   ├── research/               # fundamentals + news + LLM brief
+│   ├── api/
+│   ├── runtime/                 # async bus, workers, playbooks
+│   ├── strategy/
+│   │   ├── equities/            # oscillation, bottoms
+│   │   └── polymarket/          # P(event) FV, quote policy
+│   ├── research/                # fundamentals + news (equities-heavy)
+│   ├── marketdata/
+│   │   ├── equities_md.py
+│   │   └── polymarket_md.py     # WS book + resync
 │   ├── brokers/
-│   │   ├── robinhood_mcp.py    # live MCP adapter
-│   │   └── mock_robinhood.py   # dry-run
-│   ├── data/                   # OHLCV + FMP/AV clients
-│   ├── models/                 # pydantic schemas
+│   │   ├── robinhood_mcp.py
+│   │   ├── mock_robinhood.py
+│   │   └── polymarket_clob.py   # CLOB V2 gateway
+│   ├── training/                # offline jobs, param registry
+│   ├── risk/
+│   ├── models/
 │   └── config/
-├── web/                        # dashboard (Next or simple React)
+├── web/
 └── tests/
 ```
 
 ---
 
-## Dependencies (target)
+## Dependencies (target, extended)
 
-- fastapi, uvicorn, pydantic, python-dotenv, httpx
-- pandas, numpy
-- mcp (client) for Robinhood Trading MCP / mock
-- financial data: `fmp` HTTP or official SDK; optional `yfinance` for dry-run
-- LLM provider already available in env (Bedrock / OpenAI / Anthropic) for research briefs
+- Prior stack + `py-clob-client-v2`, `websockets`, `numpy`, `scipy` / `scikit-learn` (offline)
+- Optional: `polars` for training frames; GPU only for offline discovery later
 
-## Environment Variables (target)
+## Environment Variables (target, extended)
 
 ```
 TRADE_MODE=DRY_RUN
+VENUES=robinhood,polymarket
+REQUIRE_USER_APPROVAL=true
+PLAYBOOK_ARMED=false
 FMP_API_KEY=
 ALPHA_VANTAGE_API_KEY=
-TAVILY_API_KEY=                 # optional research enrichment
+TAVILY_API_KEY=
 ROBINHOOD_MCP_URL=https://agent.robinhood.com/mcp/trading
+POLYMARKET_HOST=https://clob.polymarket.com
+POLYMARKET_PRIVATE_KEY=
+POLYMARKET_FUNDER=
+POLYMARKET_API_KEY=
+POLYMARKET_API_SECRET=
+POLYMARKET_API_PASSPHRASE=
+POLYMARKET_CHAIN_ID=137
 MAX_POSITION_PCT=5
 MAX_PORTFOLIO_RISK_PCT=25
-REQUIRE_USER_APPROVAL=true
+MAX_POLY_INVENTORY_USD=500
+KILL_SWITCH=false
 ```
 
 ---
@@ -378,3 +564,4 @@ REQUIRE_USER_APPROVAL=true
 
 - 2026-07-23: Pivoted from legacy Claude/Tavily notebook demo to AI hedge-fund oscillation bot plan.
 - 2026-07-23: Added official Robinhood Trading MCP execution path, market research integration, and full fundamentals review checklist.
+- 2026-07-23: Absorbed HFT MM component model (MD, FV, order placement, connectivity, offline training); defined async runtime + Polymarket CLOB V2 venue implications and model roadmap.
