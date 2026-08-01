@@ -152,3 +152,44 @@ machines with sensitive data.
 - [BlenderMCP GitHub](https://github.com/ahujasid/blender-mcp)
 - [Cursor MCP documentation](https://cursor.com/help/customization/mcp)
 - [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/)
+
+## Cloud environment (Cursor Cloud Agent VM)
+
+Blender MCP **can** run in a headless Linux cloud VM using a virtual display.
+This was verified on the Cursor Cloud Agent VM: Blender 4.0 + `xvfb-run` +
+the MCP addon listening on `localhost:9876`, with `uvx blender-mcp` connecting
+successfully.
+
+### Limitations
+
+- **Cloud Agent MCP tools**: Cursor Cloud Agents may not expose the `blender`
+  MCP server from `.cursor/mcp.json` as callable tools in the agent session
+  (only internal tools like `cursor-cloud` may appear). The stack runs on the
+  VM, but the agent may not be able to invoke it directly yet.
+- **Ephemeral VM**: Blender must be started on each new cloud agent run unless
+  you add the setup scripts to a [Cursor environment](https://cursor.com/docs)
+  build.
+- **No real GUI**: Rendering/viewport screenshots work, but there is no
+  interactive Blender window — use `xvfb-run`, not `blender -b` (background mode
+  blocks the addon server).
+
+### Cloud quick start
+
+From the repo root on a Linux cloud VM:
+
+```bash
+./scripts/cloud-blender-mcp-setup.sh   # once: install Blender, uv, enable addon
+./scripts/cloud-blender-mcp-start.sh   # start Blender + MCP addon on :9876
+./scripts/cloud-blender-mcp-verify.sh  # confirm addon + blender-mcp connect
+```
+
+The addon auto-starts its TCP server when Blender loads (default port `9876`).
+Test manually:
+
+```bash
+uvx --python 3.11 blender-mcp --help
+```
+
+For day-to-day use, **local setup** (Blender on your machine + Cursor MCP) is
+still the recommended path — lower latency, persistent GUI, and full MCP tool
+integration in the Cursor desktop app.

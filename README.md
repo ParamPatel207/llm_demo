@@ -100,7 +100,7 @@ Quick start:
 3. In Blender, open the BlenderMCP sidebar panel and click **Connect to Claude**
 4. Restart Cursor and confirm `blender` is green under **Settings → MCP**
 
-See the [full setup guide](docs/blender-mcp-setup.md) for Windows config, remote hosts, and troubleshooting.
+See the [full setup guide](docs/blender-mcp-setup.md) for Windows config, remote hosts, cloud VM setup, and troubleshooting.
 
 ## Project Structure
 
