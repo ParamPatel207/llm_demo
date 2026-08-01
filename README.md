@@ -85,17 +85,40 @@ The notebook includes:
 - "Who won the latest Nobel Prize in Physics?"
 - "What are the current trends in renewable energy?"
 
+## Blender MCP (Cursor)
+
+This workspace includes project-scoped [Blender MCP](https://github.com/ahujasid/blender-mcp) configuration so Cursor can control a local Blender session.
+
+- **Cursor config**: [`.cursor/mcp.json`](.cursor/mcp.json)
+- **Blender addon**: [`blender/addon.py`](blender/addon.py)
+- **Setup guide**: [`docs/blender-mcp-setup.md`](docs/blender-mcp-setup.md)
+
+Quick start:
+
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+2. Install the addon in Blender from `blender/addon.py`
+3. In Blender, open the BlenderMCP sidebar panel and click **Connect to Claude**
+4. Restart Cursor and confirm `blender` is green under **Settings → MCP**
+
+See the [full setup guide](docs/blender-mcp-setup.md) for Windows config, remote hosts, cloud VM setup, and troubleshooting.
+
 ## Project Structure
 
 ```
 agentMCPDemo/
+├── .cursor/
+│   └── mcp.json            # Cursor MCP servers (Blender)
 ├── agent_demo.ipynb        # Main demo: Claude + Tavily search agent
+├── blender/
+│   └── addon.py            # BlenderMCP addon for local Blender install
+├── docs/
+│   └── blender-mcp-setup.md
 ├── mcp_servers/            # Legacy MCP servers (optional)
 │   ├── tavily_server/      # Tavily MCP server implementation
 │   ├── calculator_server/  # Calculator tool server
 │   └── weather_server/     # Weather tool server
 ├── requirements.txt        # Python dependencies
-├── .env.example            # Environment configuration template
+├── env.example             # Environment configuration template
 ├── docker-compose.yml      # Container management (optional)
 ├── README.md               # This documentation
 └── plan.md                 # Project implementation plan
@@ -106,6 +129,7 @@ agentMCPDemo/
 - **`agent_demo.ipynb`**: The main interactive demo featuring Claude 3.5 Sonnet with Tavily search
 - **AWS Bedrock Integration**: Direct API calls to Claude via boto3
 - **Tavily Search**: Real-time web search capabilities  
+- **Blender MCP**: Cursor integration for controlling a local Blender session
 - **Legacy MCP Servers**: Optional containerized tools (not required for main demo)
 
 ## Why This Architecture?
